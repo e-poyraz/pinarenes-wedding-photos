@@ -110,11 +110,34 @@
     z-index:100; align-items:center; justify-content:center; padding:24px;
   }
   .lightbox.active{ display:flex; }
-  .lightbox img{ max-width:100%; max-height:90vh; }
+  .lightbox img{ max-width:100%; max-height:82vh; }
   .lightbox-close{
     position:absolute; top:20px; right:28px; color:var(--paper); font-size:32px;
-    background:none; border:none; cursor:pointer;
+    background:none; border:none; cursor:pointer; z-index:2;
   }
+  .lightbox-nav{
+    position:absolute; top:50%; transform:translateY(-50%);
+    background:rgba(248,243,233,0.15); border:none; color:var(--paper);
+    font-size:28px; width:52px; height:52px; border-radius:50%;
+    cursor:pointer; display:flex; align-items:center; justify-content:center;
+    transition:background .2s ease;
+  }
+  .lightbox-nav:hover{ background:rgba(248,243,233,0.3); }
+  .lightbox-nav.prev{ left:16px; }
+  .lightbox-nav.next{ right:16px; }
+  .lightbox-bar{
+    position:absolute; bottom:28px; left:0; right:0;
+    display:flex; align-items:center; justify-content:center; gap:16px;
+  }
+  .lightbox-download{
+    display:inline-flex; align-items:center; gap:8px;
+    background:var(--terracotta); color:var(--paper); text-decoration:none;
+    font-family:"Cormorant Garamond", serif; font-size:15px; letter-spacing:0.08em;
+    padding:11px 22px; border-radius:2px; transition:background .2s ease;
+  }
+  .lightbox-download:hover{ background:var(--gold); }
+  .lightbox-download svg{ width:16px; height:16px; }
+  .lightbox-counter{ color:var(--paper); font-size:14px; letter-spacing:0.08em; opacity:0.8; }
 
   footer{ text-align:center; padding:40px 24px 60px; color:var(--ink-soft); font-size:15px; }
 </style>
@@ -164,7 +187,19 @@
 
 <div class="lightbox" id="lightbox">
   <button class="lightbox-close" id="lightboxClose">&times;</button>
+  <button class="lightbox-nav prev" id="lightboxPrev" aria-label="Önceki fotoğraf">&#8249;</button>
   <img id="lightboxImg" src="" alt="">
+  <button class="lightbox-nav next" id="lightboxNext" aria-label="Sonraki fotoğraf">&#8250;</button>
+  <div class="lightbox-bar">
+    <span class="lightbox-counter" id="lightboxCounter"></span>
+    <a class="lightbox-download" id="lightboxDownload" download>
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 3v12M12 15l-4.5-4.5M12 15l4.5-4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M4 18v1a2 2 0 002 2h12a2 2 0 002-2v-1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      İndir
+    </a>
+  </div>
 </div>
 
 <footer>Sizi aramızda görmekten mutluluk duyarız. 🤍</footer>
@@ -236,7 +271,7 @@
   }
 
   // Resize image client-side before upload to keep payloads small
-  function resizeImage(file, maxDim = 1920, quality = 0.85) {
+  function resizeImage(file, maxDim = 2400, quality = 0.90) {
     return new Promise((resolve, reject) => {
       const img = new Image();
       const reader = new FileReader();
@@ -288,22 +323,24 @@
   const galleryGrid = document.getElementById('galleryGrid');
   const galleryEmpty = document.getElementById('galleryEmpty');
   let galleryLoaded = false;
+  let galleryItems = [];
+  let currentIndex = 0;
 
   async function loadGallery() {
     if (galleryLoaded) return;
     try {
       const res = await fetch('/api/list-photos');
       const data = await res.json();
-      const items = data.items || [];
-      if (items.length === 0) {
+      galleryItems = data.items || [];
+      if (galleryItems.length === 0) {
         galleryEmpty.style.display = 'block';
       } else {
         galleryEmpty.style.display = 'none';
-        galleryGrid.innerHTML = items.map(it =>
-          `<img src="${it.url}" loading="lazy" alt="Düğün fotoğrafı" data-full="${it.url}">`
+        galleryGrid.innerHTML = galleryItems.map((it, i) =>
+          `<img src="${it.url}" loading="lazy" alt="Düğün fotoğrafı" data-index="${i}">`
         ).join('');
         galleryGrid.querySelectorAll('img').forEach(img => {
-          img.addEventListener('click', () => openLightbox(img.dataset.full));
+          img.addEventListener('click', () => openLightbox(Number(img.dataset.index)));
         });
       }
       galleryLoaded = true;
@@ -316,12 +353,52 @@
 
   const lightbox = document.getElementById('lightbox');
   const lightboxImg = document.getElementById('lightboxImg');
-  document.getElementById('lightboxClose').addEventListener('click', () => lightbox.classList.remove('active'));
-  lightbox.addEventListener('click', e => { if (e.target === lightbox) lightbox.classList.remove('active'); });
-  function openLightbox(src) {
-    lightboxImg.src = src;
+  const lightboxDownload = document.getElementById('lightboxDownload');
+  const lightboxCounter = document.getElementById('lightboxCounter');
+  const lightboxPrev = document.getElementById('lightboxPrev');
+  const lightboxNext = document.getElementById('lightboxNext');
+
+  document.getElementById('lightboxClose').addEventListener('click', closeLightbox);
+  lightbox.addEventListener('click', e => { if (e.target === lightbox) closeLightbox(); });
+
+  function closeLightbox(){ lightbox.classList.remove('active'); }
+
+  function openLightbox(index) {
+    currentIndex = index;
+    showCurrent();
     lightbox.classList.add('active');
   }
+
+  function showCurrent(){
+    const item = galleryItems[currentIndex];
+    if (!item) return;
+    lightboxImg.src = item.url;
+    lightboxDownload.href = item.url;
+    lightboxDownload.setAttribute('download', `pinar-enes-${item.key}`);
+    lightboxCounter.textContent = `${currentIndex + 1} / ${galleryItems.length}`;
+    const multiple = galleryItems.length > 1;
+    lightboxPrev.style.display = multiple ? 'flex' : 'none';
+    lightboxNext.style.display = multiple ? 'flex' : 'none';
+  }
+
+  function showPrev(){
+    currentIndex = (currentIndex - 1 + galleryItems.length) % galleryItems.length;
+    showCurrent();
+  }
+  function showNext(){
+    currentIndex = (currentIndex + 1) % galleryItems.length;
+    showCurrent();
+  }
+
+  lightboxPrev.addEventListener('click', e => { e.stopPropagation(); showPrev(); });
+  lightboxNext.addEventListener('click', e => { e.stopPropagation(); showNext(); });
+
+  document.addEventListener('keydown', e => {
+    if (!lightbox.classList.contains('active')) return;
+    if (e.key === 'ArrowLeft') showPrev();
+    else if (e.key === 'ArrowRight') showNext();
+    else if (e.key === 'Escape') closeLightbox();
+  });
 </script>
 
 </body>

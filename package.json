@@ -1,0 +1,10 @@
+{
+  "name": "pinar-enes-fotograflar",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Pınar & Enes düğünü için misafir fotoğraf yükleme ve galeri sayfası (Netlify Blobs ile).",
+  "dependencies": {
+    "@netlify/blobs": "^11.1.0"
+  }
+}
